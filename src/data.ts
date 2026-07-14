@@ -54,6 +54,7 @@ export interface NewsItem {
   publishedAt?: string
   sourceCountry?: string
   analysisMode?: 'live' | 'fallback' | 'unavailable'
+  sourceNetwork?: string
 }
 
 export const opportunities: Opportunity[] = [

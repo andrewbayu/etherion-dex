@@ -167,9 +167,11 @@ function buildOpportunity(
 export async function getIntelligence(options: { includeAi?: boolean } = {}) {
   const [quotes, newsResult] = await Promise.all([
     getMarketQuotes(),
-    getNewsStories().catch(() => [] as RawStory[]),
+    getNewsStories()
+      .then((stories) => ({ stories, error: null as string | null }))
+      .catch((error: unknown) => ({ stories: [] as RawStory[], error: error instanceof Error ? error.message : 'News providers unavailable.' })),
   ])
-  const stories = newsResult
+  const stories = newsResult.stories
   const analysisResult = options.includeAi === false
     ? { analyses: stories.map(fallbackAnalysis), status: 'fallback' as const }
     : await analyzeStories(stories)
@@ -184,7 +186,11 @@ export async function getIntelligence(options: { includeAi?: boolean } = {}) {
     providerStatus: {
       coinbase: quotes.filter((quote) => quote.provider === 'Coinbase Exchange').every((quote) => quote.status === 'live') ? 'live' : 'degraded',
       finnhub: quotes.filter((quote) => quote.provider === 'Finnhub').every((quote) => quote.status === 'live') ? 'live' : 'not_configured',
-      gdelt: stories.length ? 'live' : 'degraded',
+      news: stories.length ? 'live' : 'degraded',
+    },
+    providerNotes: {
+      news: newsResult.error,
+      newsNetwork: stories[0]?.sourceNetwork ?? null,
     },
     opportunities,
     news: stories.map((story) => {
@@ -204,6 +210,7 @@ export async function getIntelligence(options: { includeAi?: boolean } = {}) {
         url: story.url,
         sourceCountry: story.sourceCountry,
         analysisMode: analysisResult.status,
+        sourceNetwork: story.sourceNetwork,
       }
     }),
   }

@@ -32,8 +32,9 @@ export interface IntelligencePayload {
   providerStatus: {
     coinbase: 'live' | 'degraded'
     finnhub: 'live' | 'not_configured'
-    gdelt: 'live' | 'degraded'
+    news: 'live' | 'degraded'
   }
+  providerNotes: { news: string | null; newsNetwork: string | null }
   opportunities: LiveOpportunityPatch[]
   news: NewsItem[]
 }

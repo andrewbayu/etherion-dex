@@ -24,6 +24,7 @@ export interface RawStory {
   publishedAt: string
   sourceCountry: string
   assets: AssetId[]
+  sourceNetwork: 'GDELT' | 'Google News RSS'
 }
 
 const ASSET_TERMS: Record<AssetId, RegExp> = {
@@ -44,6 +45,21 @@ async function fetchJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
     })
     if (!response.ok) throw new Error(`Provider returned ${response.status}`)
     return await response.json() as T
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function fetchText(url: string, timeoutMs = 8_000): Promise<string> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/rss+xml, application/xml, text/xml', 'User-Agent': 'Etherion-Research-Demo/1.0' },
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`Provider returned ${response.status}`)
+    return await response.text()
   } finally {
     clearTimeout(timeout)
   }
@@ -171,15 +187,16 @@ interface GdeltResponse {
   }>
 }
 
-export async function getNewsStories(): Promise<RawStory[]> {
+async function getGdeltStories(): Promise<RawStory[]> {
   const params = new URLSearchParams({
-    query: '(Bitcoin OR Solana OR Nvidia OR "Taiwan Semiconductor" OR TSMC) sourcelang:english',
+    query: '(Bitcoin OR Solana OR Nvidia OR TSMC) sourcelang:english',
     mode: 'artlist',
-    maxrecords: '40',
+    maxrecords: '24',
     format: 'json',
     sort: 'datedesc',
+    timespan: '72h',
   })
-  const payload = await fetchJson<GdeltResponse>(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`, 12_000)
+  const payload = await fetchJson<GdeltResponse>(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`, 9_000)
   const seen = new Set<string>()
 
   return (payload.articles ?? []).flatMap((article, index) => {
@@ -204,8 +221,82 @@ export async function getNewsStories(): Promise<RawStory[]> {
       publishedAt: Number.isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString(),
       sourceCountry: article.sourcecountry ?? 'Unknown',
       assets,
+      sourceNetwork: 'GDELT' as const,
     }]
   }).slice(0, 18)
+}
+
+const GOOGLE_TOPICS: Array<{ id: AssetId; query: string }> = [
+  { id: 'btc', query: 'Bitcoin' },
+  { id: 'sol', query: 'Solana' },
+  { id: 'nvda', query: 'Nvidia' },
+  { id: 'tsm', query: 'TSMC' },
+]
+
+function decodeXml(value: string) {
+  return value
+    .replace(/^<!\[CDATA\[|\]\]>$/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim()
+}
+
+function xmlValue(item: string, tag: string) {
+  const match = item.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i'))
+  return match ? decodeXml(match[1]) : ''
+}
+
+async function getGoogleNewsStories(): Promise<RawStory[]> {
+  const feeds = await Promise.all(GOOGLE_TOPICS.map(async ({ id, query }) => {
+    const params = new URLSearchParams({ q: `${query} when:2d`, hl: 'en-US', gl: 'US', ceid: 'US:en' })
+    const xml = await fetchText(`https://news.google.com/rss/search?${params}`, 8_000)
+    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 6).flatMap((match, index) => {
+      const item = match[1]
+      const fullTitle = xmlValue(item, 'title')
+      const link = xmlValue(item, 'link')
+      const publishedAt = xmlValue(item, 'pubDate')
+      const source = xmlValue(item, 'source')
+      if (!fullTitle || !link) return []
+      const escapedSource = source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const title = fullTitle.replace(new RegExp(`\\s+-\\s+${escapedSource}$`, 'i'), '')
+      const mappedAssets = (Object.entries(ASSET_TERMS) as Array<[AssetId, RegExp]>)
+        .filter(([, pattern]) => pattern.test(title))
+        .map(([asset]) => asset)
+      if (!mappedAssets.includes(id)) mappedAssets.push(id)
+      return [{
+        id: `gnews-${id}-${index}-${Math.abs(hash(link))}`,
+        title,
+        url: link,
+        domain: source || 'Google News',
+        publishedAt: Number.isNaN(new Date(publishedAt).getTime()) ? new Date().toISOString() : new Date(publishedAt).toISOString(),
+        sourceCountry: 'Aggregated',
+        assets: mappedAssets,
+        sourceNetwork: 'Google News RSS' as const,
+      }]
+    })
+  }))
+  const seen = new Set<string>()
+  return feeds.flat().filter((story) => {
+    const key = story.title.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  }).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 18)
+}
+
+export async function getNewsStories(): Promise<RawStory[]> {
+  const requireStories = async (promise: Promise<RawStory[]>) => {
+    const stories = await promise
+    if (!stories.length) throw new Error('Provider returned no mapped stories.')
+    return stories
+  }
+  return Promise.any([
+    requireStories(getGdeltStories()),
+    requireStories(getGoogleNewsStories()),
+  ])
 }
 
 function hash(value: string) {

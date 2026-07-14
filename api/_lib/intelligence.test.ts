@@ -36,7 +36,8 @@ describe('live intelligence contract', () => {
     const nvidia = result.opportunities.find((item) => item.id === 'nvda')
 
     expect(result.aiStatus).toBe('fallback')
-    expect(result.providerStatus).toEqual({ coinbase: 'live', finnhub: 'not_configured', gdelt: 'live' })
+    expect(result.providerStatus).toEqual({ coinbase: 'live', finnhub: 'not_configured', news: 'live' })
+    expect(result.providerNotes.newsNetwork).toBe('GDELT')
     expect(bitcoin).toMatchObject({ price: '$120,000', dataState: 'live', marketProvider: 'Coinbase Exchange' })
     expect(bitcoin?.score).toBeGreaterThan(0)
     expect(bitcoin?.score).toBeLessThanOrEqual(100)
