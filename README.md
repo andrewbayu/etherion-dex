@@ -6,6 +6,7 @@ This repository is an interactive first-release prototype based on the supplied 
 
 ## Public demo account
 
+- Live demo: [andrewbayu.github.io/etherion-dex](https://andrewbayu.github.io/etherion-dex/)
 - Email: `demo@etherion.app`
 - Password: `demo123`
 
