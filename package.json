@@ -12,11 +12,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.227",
     "@phosphor-icons/react": "^2.1.10",
+    "ai": "^6.0.225",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.7.1",
-    "recharts": "^3.1.0"
+    "recharts": "^3.1.0",
+    "streamdown": "^2.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

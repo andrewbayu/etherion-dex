@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useDeferredValue, useEffect, useLayoutEffect, useState } from 'react'
+import { FormEvent, lazy, ReactNode, Suspense, useDeferredValue, useEffect, useLayoutEffect, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -68,12 +68,13 @@ import {
   discussions,
   events,
   marketPulse,
-  news,
   notifications,
-  opportunities,
   type Opportunity,
   type RiskLevel,
 } from './data'
+import { LiveIntelligenceProvider, useLiveIntelligence } from './live-intelligence'
+
+const GroundedAssistant = lazy(() => import('./components/GroundedAssistant').then((module) => ({ default: module.GroundedAssistant })))
 
 const STORAGE_KEY = 'etherion-demo-session'
 
@@ -137,11 +138,11 @@ function Login({ onLogin }: { onLogin: () => void }) {
             <p className="login-copy">An AI-assisted market research workspace where every opportunity comes with sources, risks, version history, and human review.</p>
           </div>
           <div className="login-proof">
-            <div><span>87</span><p>Top research score</p></div>
-            <div><span>12</span><p>Evidence sources today</p></div>
-            <div><span>100%</span><p>Human reviewed</p></div>
+            <div><span>LIVE</span><p>Crypto market quotes</p></div>
+            <div><span>3</span><p>Server-side providers</p></div>
+            <div><span>v3.0</span><p>Auditable score engine</p></div>
           </div>
-          <p className="legal-copy">Research and education only. Not investment advice. Demo data is illustrative and not live.</p>
+          <p className="legal-copy">Research and education only. Not investment advice. Live provider coverage and freshness are shown after login.</p>
         </div>
       </section>
       <section className="login-panel">
@@ -186,6 +187,8 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const location = useLocation()
+  const { payload, loading, sourceMode, refresh } = useLiveIntelligence()
+  const liveTime = payload ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(payload.asOf)) : null
 
   useEffect(() => {
     setMenuOpen(false)
@@ -236,7 +239,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><List size={22} /></button>
           <button className="search-trigger" onClick={() => setSearchOpen(true)}><MagnifyingGlass size={17} /><span>Search assets, news, research</span><kbd>⌘ K</kbd></button>
           <div className="topbar-actions">
-            <span className="data-status"><span /> DEMO DATA · UPDATED 10:42 WIB</span>
+            <button className={`data-status ${sourceMode}`} onClick={refresh} title="Refresh live intelligence"><span /> {loading ? 'CONNECTING LIVE DATA' : sourceMode === 'live' ? `LIVE · ${liveTime} WIB` : sourceMode === 'partial' ? `PARTIAL LIVE · ${liveTime} WIB` : 'REFERENCE DATA · RETRY'}</button>
             <Link to="/notifications" className="icon-button notification-button" aria-label="Notifications"><Bell size={20} /><span /></Link>
           </div>
         </header>
@@ -262,6 +265,7 @@ function SearchModal({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const deferred = useDeferredValue(query)
   const navigate = useNavigate()
+  const { opportunities } = useLiveIntelligence()
   const results = opportunities.filter((item) => `${item.name} ${item.symbol}`.toLowerCase().includes(deferred.toLowerCase()))
 
   useEffect(() => {
@@ -293,20 +297,34 @@ function PageHeader({ eyebrow, title, copy, action }: { eyebrow: string; title: 
   return <div className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1>{copy && <p>{copy}</p>}</div>{action && <div className="page-actions">{action}</div>}</div>
 }
 
+function DataModeNotice() {
+  const { payload, loading, error, sourceMode, refresh } = useLiveIntelligence()
+  if (loading) return <div className="data-mode-banner loading"><Clock size={17} /><p><strong>Connecting live providers.</strong> Coinbase, news evidence, and the scoring pipeline are refreshing now.</p></div>
+  if (sourceMode === 'live') return <div className="data-mode-banner live"><CheckCircle size={17} weight="fill" /><p><strong>Live intelligence active.</strong> Market, evidence, and {payload?.aiStatus === 'live' ? 'AI feature extraction' : 'fallback feature extraction'} refreshed from the server.</p><button onClick={refresh}>Refresh</button></div>
+  if (sourceMode === 'partial') return <div className="data-mode-banner partial"><Warning size={17} weight="fill" /><p><strong>Partial live coverage.</strong> Crypto and news are live; US equity quotes remain reference values until FINNHUB_API_KEY is configured.</p><button onClick={refresh}>Retry</button></div>
+  return <div className="data-mode-banner reference"><Database size={17} /><p><strong>Reference data visible.</strong> {error ?? 'The live API is unavailable on this host.'}</p><button onClick={refresh}>Retry live</button></div>
+}
+
 function Dashboard() {
+  const { opportunities, news, payload, sourceMode } = useLiveIntelligence()
+  const averageScore = Math.round(opportunities.reduce((sum, item) => sum + item.score, 0) / opportunities.length)
+  const liveAssets = opportunities.filter((item) => item.dataState === 'live').length
+  const liveProviders = payload ? Object.values(payload.providerStatus).filter((status) => status === 'live').length : 0
+  const today = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date()).toUpperCase()
   return <div className="page dashboard-page">
-    <PageHeader eyebrow="TUESDAY · 14 JULY 2026" title="Good morning, Alex." copy="Your watchlist has 3 material changes since yesterday." action={<button className="secondary-button"><ClipboardText size={17} /> Daily briefing</button>} />
+    <PageHeader eyebrow={today} title="Good morning, Alex." copy={sourceMode === 'reference' ? 'Reference research is visible while the live pipeline reconnects.' : `${liveAssets} assets have verified live market coverage right now.`} action={<button className="secondary-button"><ClipboardText size={17} /> Daily briefing</button>} />
+    <DataModeNotice />
 
     <section className="signal-strip" aria-label="Market summary">
-      <div><span className="metric-icon"><ChartLineUp size={19} /></span><p>Market regime<small>Risk-on · measured</small></p><strong className="positive">+6.4</strong></div>
-      <div><span className="metric-icon"><Eye size={19} /></span><p>Watchlist pulse<small>6 bullish · 2 mixed</small></p><strong>72</strong></div>
+      <div><span className="metric-icon"><ChartLineUp size={19} /></span><p>Research regime<small>Deterministic score average</small></p><strong className={averageScore >= 60 ? 'positive' : ''}>{averageScore}</strong></div>
+      <div><span className="metric-icon"><Eye size={19} /></span><p>Live market coverage<small>{liveAssets} of {opportunities.length} assets</small></p><strong>{liveAssets}/{opportunities.length}</strong></div>
       <div><span className="metric-icon"><CalendarBlank size={19} /></span><p>Next impact event<small>US CPI · 22h</small></p><strong>HIGH</strong></div>
-      <div><span className="metric-icon"><ShieldCheck size={19} /></span><p>Data coverage<small>12 of 12 sources healthy</small></p><strong className="positive">100%</strong></div>
+      <div><span className="metric-icon"><ShieldCheck size={19} /></span><p>Provider health<small>{liveProviders} of 3 providers live</small></p><strong className={liveProviders >= 2 ? 'positive' : ''}>{liveProviders}/3</strong></div>
     </section>
 
     <div className="dashboard-grid">
       <section className="panel opportunity-panel">
-        <SectionHeading title="AI watchlist" copy="Human-reviewed research candidates" link="/watchlist" />
+        <SectionHeading title="AI watchlist" copy="Live features · deterministic final score" link="/watchlist" />
         <div className="opportunity-list">
           {opportunities.slice(0, 3).map((item, index) => <OpportunityRow key={item.id} item={item} rank={index + 1} />)}
         </div>
@@ -314,8 +332,8 @@ function Dashboard() {
       </section>
 
       <section className="panel pulse-panel">
-        <div className="panel-top"><div><p className="eyebrow">CROSS-ASSET SENTIMENT</p><h2>Market pulse</h2></div><span className="live-label"><span /> REFRESHED</span></div>
-        <div className="pulse-score"><strong>74</strong><span><b>Constructive</b><small>+8 since yesterday</small></span></div>
+        <div className="panel-top"><div><p className="eyebrow">CROSS-ASSET RESEARCH</p><h2>Score pulse</h2></div><span className="live-label"><span /> {sourceMode === 'reference' ? 'REFERENCE' : 'REFRESHED'}</span></div>
+        <div className="pulse-score"><strong>{averageScore}</strong><span><b>{averageScore >= 70 ? 'Constructive' : averageScore >= 55 ? 'Measured' : 'Cautious'}</b><small>{payload?.scoreVersion ?? 'reference model'}</small></span></div>
         <div className="chart-wrap" aria-label="Market pulse chart">
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={marketPulse} margin={{ top: 10, right: 4, left: -28, bottom: 0 }}>
@@ -363,10 +381,12 @@ function Watchlist() {
   const [risk, setRisk] = useState<'All' | RiskLevel>('All')
   const [query, setQuery] = useState('')
   const deferred = useDeferredValue(query)
+  const { opportunities } = useLiveIntelligence()
   const filtered = opportunities.filter((item) => (market === 'All' || item.market === market) && (risk === 'All' || item.risk === risk) && `${item.name} ${item.symbol}`.toLowerCase().includes(deferred.toLowerCase()))
 
   return <div className="page">
-    <PageHeader eyebrow="EVIDENCE-BACKED OPPORTUNITIES" title="AI watchlist" copy="Ranked candidates reviewed by analysts. Every score includes risk, sources, and version history." action={<button className="primary-button"><Plus size={17} weight="bold" /> Create alert</button>} />
+    <PageHeader eyebrow="LIVE EVIDENCE · DETERMINISTIC SCORE" title="AI watchlist" copy="AI extracts structured features from current evidence; a versioned formula calculates the final score." action={<button className="primary-button"><Plus size={17} weight="bold" /> Create alert</button>} />
+    <DataModeNotice />
     <div className="filter-bar">
       <label className="table-search"><MagnifyingGlass size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search assets" aria-label="Search assets" /></label>
       <div className="segmented" aria-label="Filter by market">{(['All', 'Crypto', 'Equity'] as const).map((value) => <button className={market === value ? 'active' : ''} onClick={() => setMarket(value)} key={value}>{value}</button>)}</div>
@@ -381,7 +401,7 @@ function Watchlist() {
         <span><strong>{item.price}</strong><small className={item.move >= 0 ? 'positive' : 'negative'}>{item.move >= 0 ? '+' : ''}{item.move.toFixed(2)}%</small></span>
         <Risk value={item.risk} />
         <span><strong>{item.horizon}</strong><small>Research window</small></span>
-        <span><strong>{item.updated.split(' · ')[1]}</strong><small>{item.updated.split(' · ')[0]}</small></span>
+        <span><strong>{item.updated}</strong><small>{item.marketProvider ?? 'Reference dataset'}</small></span>
         <ArrowRight size={17} />
       </Link>)}
       {!filtered.length && <EmptyState icon={Funnel} title="No candidates match" copy="Clear a filter or search a different asset." />}
@@ -392,29 +412,32 @@ function Watchlist() {
 
 function OpportunityDetail() {
   const { id } = useParams()
+  const { opportunities, payload } = useLiveIntelligence()
   const item = opportunities.find((entry) => entry.id === id)
   const [saved, setSaved] = useState(true)
+  const [assistantOpen, setAssistantOpen] = useState(false)
   const navigate = useNavigate()
   if (!item) return <Navigate to="/watchlist" replace />
   const componentChart = item.components.map((component) => ({ name: component.label.split(' ')[0], score: component.score }))
 
   return <div className="page detail-page">
     <button className="back-button" onClick={() => navigate(-1)}><ArrowLeft size={17} /> Back to watchlist</button>
+    <DataModeNotice />
     <section className="detail-hero">
-      <div className="detail-identity"><AssetMark symbol={item.symbol} large /><div><div className="detail-title-line"><h1>{item.name}</h1><span>{item.symbol}</span><span>{item.market}</span></div><p>{item.venue} · Market open · Updated {item.updated}</p></div></div>
+      <div className="detail-identity"><AssetMark symbol={item.symbol} large /><div><div className="detail-title-line"><h1>{item.name}</h1><span>{item.symbol}</span><span>{item.market}</span></div><p>{item.marketProvider ?? item.venue} · {item.dataState ?? 'reference'} coverage · Updated {item.updated}</p></div></div>
       <div className="detail-price"><strong>{item.price}</strong><span className={item.move >= 0 ? 'positive' : 'negative'}>{item.move >= 0 ? '+' : ''}{item.move.toFixed(2)}% today</span></div>
       <div className="detail-actions"><button className="secondary-button" onClick={() => setSaved((value) => !value)}>{saved ? <Star size={17} weight="fill" /> : <Star size={17} />} {saved ? 'Watching' : 'Add to watchlist'}</button><button className="icon-button"><DotsThree size={22} /></button></div>
     </section>
 
     <section className="detail-scoreboard">
-      <div className="hero-score"><ScoreRing score={item.score} size="large" /><div><p>ETHERION SCORE</p><h2>{item.score}<span>/100</span></h2><small>{item.confidence}% model confidence</small></div></div>
-      <div className="score-meta"><span><small>RESEARCH HORIZON</small><strong>{item.horizon}</strong></span><span><small>RISK LEVEL</small><Risk value={item.risk} /></span><span><small>REVIEW STATUS</small><strong className="verified"><CheckCircle size={17} weight="fill" /> Analyst approved</strong></span><span><small>SCORE VERSION</small><strong>{item.version}</strong></span></div>
-      <div className="reviewer"><div className="avatar">MC</div><span><small>REVIEWED BY</small><strong>{item.reviewedBy}</strong><em>Approved 14 Jul · 11:02 WIB</em></span></div>
+      <div className="hero-score"><ScoreRing score={item.score} size="large" /><div><p>{item.dataState ? 'ETHERION LIVE SCORE' : 'ETHERION SCORE'}</p><h2>{item.score}<span>/100</span></h2><small>{item.confidence}% evidence confidence</small></div></div>
+      <div className="score-meta"><span><small>RESEARCH HORIZON</small><strong>{item.horizon}</strong></span><span><small>RISK LEVEL</small><Risk value={item.risk} /></span><span><small>REVIEW STATUS</small><strong className={item.dataState ? 'pending-review' : 'verified'}>{item.dataState ? <><Clock size={17} /> Automated · unreviewed</> : <><CheckCircle size={17} weight="fill" /> Analyst approved</>}</strong></span><span><small>SCORE VERSION</small><strong>{item.version}</strong></span></div>
+      <div className="reviewer"><div className="avatar">AI</div><span><small>PIPELINE</small><strong>{item.reviewedBy}</strong><em>{item.aiStatus === 'live' ? `Feature model ${payload?.featureModel}` : 'Rules fallback active'}</em></span></div>
     </section>
 
     <div className="detail-grid">
       <div className="detail-main">
-        <section className="panel thesis-panel"><p className="eyebrow">ANALYST-APPROVED THESIS</p><h2>The evidence, in plain language.</h2><p className="thesis-copy">{item.thesis}</p><div className="invalidation"><Warning size={19} weight="fill" /><div><strong>Thesis invalidation</strong><p>{item.invalidation}</p></div></div></section>
+        <section className="panel thesis-panel"><p className="eyebrow">{item.dataState ? 'AUTOMATED LIVE SYNTHESIS · UNREVIEWED' : 'ANALYST-APPROVED THESIS'}</p><h2>The evidence, in plain language.</h2><p className="thesis-copy">{item.thesis}</p><div className="invalidation"><Warning size={19} weight="fill" /><div><strong>Thesis invalidation</strong><p>{item.invalidation}</p></div></div></section>
 
         <section className="panel score-breakdown"><SectionHeading title="Why it scored this way" copy="Weighted components before risk gates" />
           <div className="component-layout"><div className="component-chart"><ResponsiveContainer width="100%" height={230}><BarChart data={componentChart} layout="vertical" margin={{ left: 4, right: 12 }}><CartesianGrid stroke="#222723" horizontal={false} /><XAxis type="number" domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#737b75', fontSize: 10 }} /><YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={{ fill: '#aab2ac', fontSize: 11 }} /><Tooltip content={<ChartTooltip />} /><Bar dataKey="score" radius={[0, 3, 3, 0]}>{componentChart.map((entry, index) => <Cell fill={index === 4 ? '#e2a547' : '#c8f135'} key={entry.name} />)}</Bar></BarChart></ResponsiveContainer></div>
@@ -425,28 +448,33 @@ function OpportunityDetail() {
           <div className="scenario-grid">{item.scenarios.map((scenario) => <article className={`scenario ${scenario.name.toLowerCase()}`} key={scenario.name}><span>{scenario.name === 'Bull' ? <TrendUp size={18} /> : scenario.name === 'Bear' ? <TrendDown size={18} /> : <ArrowRight size={18} />}{scenario.name} case</span><strong>{scenario.range}</strong><p>{scenario.description}</p></article>)}</div>
         </section>
 
-        <section className="panel evidence-panel"><SectionHeading title="Evidence room" copy={`${item.evidence.length} primary and independent sources`} />
-          {item.evidence.map((source, index) => <button className="evidence-row" key={source.title}><span className="evidence-index">0{index + 1}</span><span><strong>{source.title}</strong><small>{source.publisher} · {source.time}</small></span><em>{source.type}</em><ArrowRight size={17} /></button>)}
+        <section className="panel evidence-panel"><SectionHeading title="Evidence room" copy={`${item.evidence.length} linked sources in the current score`} />
+          {item.evidence.map((source, index) => source.url
+            ? <a className="evidence-row" key={source.title} href={source.url} target="_blank" rel="noreferrer"><span className="evidence-index">0{index + 1}</span><span><strong>{source.title}</strong><small>{source.publisher} · {source.time}</small></span><em>{source.type}</em><ArrowRight size={17} /></a>
+            : <button className="evidence-row" key={source.title}><span className="evidence-index">0{index + 1}</span><span><strong>{source.title}</strong><small>{source.publisher} · {source.time}</small></span><em>{source.type}</em><ArrowRight size={17} /></button>)}
         </section>
       </div>
       <aside className="detail-aside">
         <section className="panel catalyst-panel"><h3>Supporting catalysts</h3>{item.catalysts.map((catalyst) => <p key={catalyst}><CheckCircle size={18} weight="fill" />{catalyst}</p>)}</section>
         <section className="panel risk-panel"><h3>Risks & contrary evidence</h3>{item.risks.map((risk) => <p key={risk}><Warning size={18} weight="fill" />{risk}</p>)}</section>
         <section className="panel history-panel"><h3>Version history</h3>{item.history.map((entry) => <div key={`${entry.version}-${entry.date}`}><span /><p><strong>{entry.version} · {entry.date}</strong><small>{entry.note}</small></p></div>)}</section>
-        <section className="ask-panel"><Sparkle size={23} weight="duotone" /><h3>Ask the research</h3><p>Answers are limited to this approved evidence set.</p><button>Open grounded assistant <ArrowRight size={16} /></button></section>
+        <section className="ask-panel"><Sparkle size={23} weight="duotone" /><h3>Ask the research</h3><p>Answers are rebuilt from the latest server-side evidence and cite their source IDs.</p><button onClick={() => setAssistantOpen(true)}>Open grounded assistant <ArrowRight size={16} /></button></section>
       </aside>
     </div>
+    {assistantOpen && <Suspense fallback={<div className="assistant-backdrop"><div className="assistant-loading">Opening grounded evidence…</div></div>}><GroundedAssistant item={item} onClose={() => setAssistantOpen(false)} /></Suspense>}
   </div>
 }
 
 function NewsPage() {
   const [filter, setFilter] = useState('All')
+  const { news, payload } = useLiveIntelligence()
   const filtered = news.filter((item) => filter === 'All' || item.sentiment === filter)
   return <div className="page">
-    <PageHeader eyebrow="SOURCE-WEIGHTED INTELLIGENCE" title="News & sentiment" copy="Syndicated coverage is clustered once. Confidence, source mix, and uncertainty stay visible." action={<button className="secondary-button"><GearSix size={17} /> Feed settings</button>} />
+    <PageHeader eyebrow="LIVE SOURCE-WEIGHTED INTELLIGENCE" title="News & sentiment" copy="Headlines are fetched live, mapped to assets, and classified conservatively. Open the source to inspect the original." action={<button className="secondary-button"><GearSix size={17} /> Feed settings</button>} />
+    <DataModeNotice />
     <div className="filter-bar"><div className="segmented">{['All', 'Bullish', 'Mixed', 'Bearish', 'Neutral'].map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}</div><span className="result-count">{filtered.length} story clusters</span></div>
-    <div className="news-layout"><section className="panel news-feed">{filtered.map((item) => <article className="news-card" key={item.id}><div className="news-meta"><Sentiment value={item.sentiment} /><span>{item.publisher} · {item.time}</span></div><h2>{item.headline}</h2><p>{item.summary}</p><div className="news-bottom"><div className="asset-tags">{item.assets.map((asset) => <span key={asset}>{asset}</span>)}</div><div className="confidence"><span>CONFIDENCE</span><strong>{item.confidence}%</strong><small>Impact: {item.horizon}</small></div><button className="text-button">Inspect sources <ArrowRight size={15} /></button></div></article>)}</section>
-      <aside><section className="panel source-health"><div className="panel-top"><div><p className="eyebrow">DATA QUALITY</p><h2>Source health</h2></div><Database size={21} /></div><strong>12 / 12</strong><p>providers operating normally</p>{['Primary sources', 'Tier-one media', 'Market data', 'On-chain feeds'].map((label) => <div className="health-row" key={label}><span>{label}</span><b><span />Healthy</b></div>)}</section><div className="disclosure compact"><ShieldCheck size={19} /><p>Sentiment is context, not a standalone signal. Low-confidence items never influence opportunity scores automatically.</p></div></aside>
+    <div className="news-layout"><section className="panel news-feed">{filtered.map((item) => <article className="news-card" key={item.id}><div className="news-meta"><Sentiment value={item.sentiment} /><span>{item.publisher} · {item.time}</span></div><h2>{item.headline}</h2><p>{item.summary}</p><div className="news-bottom"><div className="asset-tags">{item.assets.map((asset) => <span key={asset}>{asset}</span>)}</div><div className="confidence"><span>CONFIDENCE</span><strong>{Math.round(item.confidence)}%</strong><small>{item.analysisMode === 'live' ? 'AI extracted' : 'Rules fallback'}</small></div>{item.url ? <a className="text-button" href={item.url} target="_blank" rel="noreferrer">Open source <ArrowRight size={15} /></a> : <button className="text-button">Reference item <ArrowRight size={15} /></button>}</div></article>)}</section>
+      <aside><section className="panel source-health"><div className="panel-top"><div><p className="eyebrow">DATA QUALITY</p><h2>Source health</h2></div><Database size={21} /></div><strong>{Object.values(payload?.providerStatus ?? {}).filter((status) => status === 'live').length} / 3</strong><p>providers operating live</p>{[['Coinbase market', payload?.providerStatus.coinbase], ['Finnhub equities', payload?.providerStatus.finnhub], ['GDELT news', payload?.providerStatus.gdelt], ['AI feature model', payload?.aiStatus]].map(([label, status]) => <div className="health-row" key={label}><span>{label}</span><b className={status === 'live' ? '' : 'degraded'}><span />{status?.replace('_', ' ') ?? 'offline'}</b></div>)}</section><div className="disclosure compact"><ShieldCheck size={19} /><p>Sentiment is context, not a standalone signal. The final score is deterministic and includes coverage and risk gates.</p></div></aside>
     </div>
   </div>
 }
@@ -554,7 +582,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 function AppRoot() {
   const [loggedIn, setLoggedIn] = useState(() => localStorage.getItem(STORAGE_KEY) === 'active')
   if (!loggedIn) return <Login onLogin={() => setLoggedIn(true)} />
-  return <Shell onLogout={() => { localStorage.removeItem(STORAGE_KEY); setLoggedIn(false) }} />
+  return <LiveIntelligenceProvider><Shell onLogout={() => { localStorage.removeItem(STORAGE_KEY); setLoggedIn(false) }} /></LiveIntelligenceProvider>
 }
 
 export default function App() {

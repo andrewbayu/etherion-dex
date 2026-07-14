@@ -1,4 +1,4 @@
-const CACHE = 'etherion-demo-v1'
+const CACHE = 'etherion-live-v2'
 const SHELL = ['./', './index.html']
 
 self.addEventListener('install', (event) => {
@@ -15,6 +15,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
+  if (new URL(event.request.url).pathname.startsWith('/api/')) return
   event.respondWith(
     fetch(event.request)
       .then((response) => {

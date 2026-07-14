@@ -1,30 +1,35 @@
 # Etherion DEX
 
-Etherion is an evidence-first AI market research community demo for crypto and US equities. The product is built around a simple principle: every opportunity should expose its score composition, confidence, risks, sources, human reviewer, and version history.
-
-This repository is an interactive first-release prototype based on the supplied MarketSignal PRD. It intentionally demonstrates the member experience with seeded data; it does not claim to provide live market data, autonomous picks, brokerage execution, or financial advice.
+Etherion is an evidence-first market research workspace for crypto and US equities. The current release combines live provider data, auditable AI feature extraction, deterministic scoring, linked evidence, and a source-bounded streaming assistant.
 
 ## Public demo account
 
-- Live demo: [andrewbayu.github.io/etherion-dex](https://andrewbayu.github.io/etherion-dex/)
+- Static fallback: [andrewbayu.github.io/etherion-dex](https://andrewbayu.github.io/etherion-dex/)
 - Email: `demo@etherion.app`
 - Password: `demo123`
 
-The credentials are intentionally public. Authentication is client-side and exists only to demonstrate the gated product experience. Do not reuse this pattern for production authentication.
+The credentials are intentionally public. Authentication is client-side and exists only to demonstrate the gated member experience. Do not reuse this pattern for production authentication.
 
-## Included product journeys
+## What is live
 
-- Personalized member dashboard and daily market pulse
-- Ranked AI Watchlist with market, risk, and search filters
-- Full opportunity briefs with weighted score components
-- Bull/base/bear scenarios, invalidation, risks, and evidence room
-- Immutable-looking review and version history
-- Curated news clusters with sentiment confidence
-- Watchlist-mapped economic calendar
-- Course progress and grounded tutor entry point
-- Moderated community and verified analyst states
-- Notification center and alert preferences
-- Responsive layout and installable PWA shell
+- BTC and SOL quotes, daily range, change, and volume from Coinbase Exchange
+- Current mapped headlines and source URLs from the GDELT DOC API
+- Optional NVDA and TSM quotes from Finnhub when `FINNHUB_API_KEY` is configured
+- Structured sentiment, catalyst, and risk extraction through Vercel AI Gateway
+- Versioned `ETH-SCORE 3.0.0` scoring with deterministic weights and explicit coverage penalties
+- A streaming assistant that rebuilds its evidence context on the server and cites `[S1]`, `[S2]`, and so on
+
+AI does not set the final opportunity score. It extracts constrained features from the retrieved evidence; the versioned scoring function calculates the final result. If AI is unavailable, the API exposes a rules-based fallback state rather than hiding the failure.
+
+## Provider states
+
+The UI always shows whether it is using live, partial, or reference data. With no extra market-data key, Coinbase and GDELT can be live while equity prices remain reference values. Add this server-side environment variable to enable equity quotes:
+
+```text
+FINNHUB_API_KEY=your_finnhub_key
+```
+
+Never prefix provider keys with `VITE_`; that would expose them to the browser bundle.
 
 ## Run locally
 
@@ -33,7 +38,7 @@ npm install
 npm run dev
 ```
 
-Then open the local URL printed by Vite and sign in with the public demo account.
+Vite serves the client locally. The `/api` directory is designed for Vercel Functions, so use Vercel's local runtime when testing the complete live stack.
 
 ## Quality checks
 
@@ -43,26 +48,16 @@ npm run test
 npm run build
 ```
 
-## GitHub Pages
+The suite includes the public-login flow and a backend contract test that verifies deterministic scoring and partial-provider degradation.
 
-The workflow in `.github/workflows/deploy-pages.yml` builds and publishes the static app whenever `main` changes. In GitHub repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions** if it is not selected automatically.
+## Deployment
 
-The app uses hash routing and a relative Vite base, so deep links and assets remain compatible with a project Pages URL.
+GitHub Pages continues to publish the static client as a resilient reference-data fallback. The live API and AI stream require a server runtime and should be deployed as a Vercel project from this repository. On Vercel, AI Gateway can use the deployment's automatically provisioned OIDC token; a static AI key is not committed to this repository.
 
-## Production architecture boundary
+## Important boundaries
 
-The supplied PRD recommends a modular monolith with asynchronous workers. A production implementation should replace the demo layer with:
-
-- An identity provider with verified email, secure sessions, MFA for administrators, and RBAC
-- PostgreSQL for transactional and versioned research data
-- Redis and a durable queue for ingestion, scoring, notification, and evaluation jobs
-- Licensed market, news, economic-calendar, and notification providers
-- A versioned AI gateway with schemas, citations, freshness gates, evaluation logs, and kill switches
-- Immutable audit records and automated outcome measurement
-- Legal review of terminology, disclosures, supported jurisdictions, and reference-zone language
-
-No secrets or provider credentials are required by this demo.
-
-## Disclaimer
-
-All prices, events, scores, names, outcomes, and research claims shown in the demo are illustrative seeded content. Etherion provides research and education interfaces, not investment advice or trade execution.
+- Research and education only; no investment advice or trade execution
+- Live news analysis uses retrieved headlines and metadata, not unverified claims about full article contents
+- Automated live synthesis is labelled unreviewed
+- Scenario ranges in the original product demo remain reference research, not live targets
+- A production release still needs real identity, durable storage, distributed rate limiting, licensed redistribution terms, admin review queues, and immutable audit records

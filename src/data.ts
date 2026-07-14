@@ -29,9 +29,31 @@ export interface Opportunity {
   invalidation: string
   components: ScoreComponent[]
   scenarios: Array<{ name: 'Bull' | 'Base' | 'Bear'; range: string; description: string }>
-  evidence: Array<{ publisher: string; title: string; time: string; type: string }>
+  evidence: Array<{ publisher: string; title: string; time: string; type: string; url?: string; publishedAt?: string }>
   history: Array<{ version: string; date: string; note: string }>
   spark: number[]
+  dataState?: 'live' | 'partial' | 'unavailable'
+  marketProvider?: string
+  marketProviderUrl?: string
+  marketMessage?: string
+  aiStatus?: 'live' | 'fallback' | 'unavailable'
+}
+
+export interface NewsItem {
+  id: number | string
+  sentiment: 'Bullish' | 'Mixed' | 'Bearish' | 'Neutral'
+  score: number
+  confidence: number
+  headline: string
+  publisher: string
+  time: string
+  assets: string[]
+  summary: string
+  horizon: string
+  url?: string
+  publishedAt?: string
+  sourceCountry?: string
+  analysisMode?: 'live' | 'fallback' | 'unavailable'
 }
 
 export const opportunities: Opportunity[] = [
@@ -229,7 +251,7 @@ export const marketPulse = [
   { time: '22:00', value: 74 },
 ]
 
-export const news = [
+export const news: NewsItem[] = [
   {
     id: 1,
     sentiment: 'Bullish',
