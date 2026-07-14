@@ -1,6 +1,6 @@
 import { convertToModelMessages, streamText, type UIMessage } from 'ai'
-import { getIntelligence } from './_lib/intelligence'
-import type { AssetId } from './_lib/providers'
+import { getIntelligence } from './_lib/intelligence.js'
+import type { AssetId } from './_lib/providers.js'
 
 export const maxDuration = 60
 

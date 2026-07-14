@@ -1,6 +1,6 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
-import { getMarketQuotes, getNewsStories, type AssetId, type MarketQuote, type RawStory } from './providers'
+import { getMarketQuotes, getNewsStories, type AssetId, type MarketQuote, type RawStory } from './providers.js'
 
 const SCORE_VERSION = 'ETH-SCORE 3.0.0'
 const FEATURE_MODEL = 'openai/gpt-5.4-nano'

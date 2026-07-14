@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getIntelligence } from './intelligence'
+import { getIntelligence } from './intelligence.js'
 
 vi.mock('ai', () => ({
   generateText: vi.fn().mockRejectedValue(new Error('Gateway unavailable in contract test')),

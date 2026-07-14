@@ -1,4 +1,4 @@
-import { getIntelligence } from './_lib/intelligence'
+import { getIntelligence } from './_lib/intelligence.js'
 
 export const maxDuration = 60
 
